@@ -44,7 +44,7 @@ __INLINE void wait(void)
 __INLINE void delay_ssel(void)
 {
     volatile int i;
-    for (i = 0; i < 250; i ++); // if in doubt, increase me
+    for (i = 0; i < 150; i ++); // if in doubt, increase me
 }
 
 __INLINE void ssel_enable(void)
@@ -73,11 +73,11 @@ uint8_t enc_write(uint8_t data)
 void enc_reset(void)
 {
     LPC_GPIO0->FIOCLR |= (1<<7);
-    delay_ms(50);
+    delay_ms(10);
     LPC_GPIO0->FIOSET |= (1<<7);
-    delay_ms(50);
+    delay_ms(10);
     enc_write(0xff);
-    delay_ms(50);
+    delay_ms(10);
 }
 
 /**
@@ -128,7 +128,8 @@ uint8_t enc_rcr_m(uint8_t reg)
 /**
  * Read Buffer Memory.
  */
-void enc_rbm(uint8_t *buf, uint16_t count) {
+void enc_rbm(uint8_t *buf, uint16_t count)
+{
     int i;
 
     ssel_enable();
@@ -143,7 +144,8 @@ void enc_rbm(uint8_t *buf, uint16_t count) {
 /**
  * Write Buffer Memory.
  */
-void enc_wbm(const uint8_t *buf, uint16_t count) {
+void enc_wbm(const uint8_t *buf, uint16_t count)
+{
     int i;
 
     ssel_enable();
@@ -160,7 +162,8 @@ void enc_wbm(const uint8_t *buf, uint16_t count) {
  * Set the bits of argument 'mask' in the register 'reg'.
  * Not valid for MAC and MII registers.
  */
-void enc_bfs(uint8_t reg, uint8_t mask) {
+void enc_bfs(uint8_t reg, uint8_t mask)
+{
     ssel_enable();
     spi_write(0x80 | reg);
     spi_write(mask);
@@ -172,7 +175,8 @@ void enc_bfs(uint8_t reg, uint8_t mask) {
  * Clear the bits of argument 'mask' in the register 'reg'.
  * Not valid for MAC and MII registers.
  */
-void enc_bfc(uint8_t reg, uint8_t mask) {
+void enc_bfc(uint8_t reg, uint8_t mask)
+{
     ssel_enable();
     spi_write(0xA0 | reg);
     spi_write(mask);
@@ -356,7 +360,6 @@ void enc_set_mac_addr(const uint8_t *mac_addr)
 void enc_get_mac_addr(uint8_t *mac_addr)
 {
     mac_addr[0] = READ_REG(ENC_MAADR1);
-    mac_addr[0] = READ_REG(ENC_MAADR1);
     mac_addr[1] = READ_REG(ENC_MAADR2);
     mac_addr[2] = READ_REG(ENC_MAADR3);
     mac_addr[3] = READ_REG(ENC_MAADR4);
@@ -441,12 +444,20 @@ void enc_init(const uint8_t *mac)
 
 uint8_t enc_action(void)
 {
+    /* Errata 4
+     * The Receive Packet Pending Interrupt Flag
+     * (EIR.PKTIF) does not reliably/accurately report
+     * the status of pending packets. */
+    /*
     uint8_t reg = READ_REG(ENC_EIR);
-
     if (reg & ENC_EIR_PKTIF) {
         if (READ_REG(ENC_EPKTCNT) > 0) {
             return 1;
         }
+    }
+    */
+    if (READ_REG(ENC_EPKTCNT) > 0) {
+        return 1;
     }
     return 0;
 }
@@ -454,33 +465,61 @@ uint8_t enc_action(void)
 void enc_print_status(uint8_t *status)
 {
     tprintf("STATUS BITS: \r\n");
-    tprintf("  ByteCount: %d, CollisionCount: %d, TotByteOnWire: %d\r\n",
+    tprintf("  ByteCount: %i, CollisionCount: %i, TotByteOnWire: %i\r\n",
         status[0] | (status[1] << 8),
         status[2] & 0x0f,
         status[4] | (status[5] << 8));
-    tprintf("  TxDone: %d, CRCErr:%d, LenChkErr: %d, LenOutOfRange: %d\r\n",
+    tprintf("  TxDone: %i, CRCErr:%i, LenChkErr: %i, LenOutOfRange: %i\r\n",
         TSV_GETBIT(status, TSV_TXDONE),
         TSV_GETBIT(status, TSV_TXCRCERROR),
         TSV_GETBIT(status, TSV_TXLENCHKERROR),
         TSV_GETBIT(status, TSV_TXLENOUTOFRANGE));
-    tprintf("  Multicast: %d, Broadcast: %d, "
-        "PacketDefer: %d, ExDefer: %d\r\n",
+    tprintf("  Multicast: %i, Broadcast: %i, "
+        "PacketDefer: %i, ExDefer: %i\r\n",
         TSV_GETBIT(status, TSV_TXMULTICAST),
         TSV_GETBIT(status, TSV_TXBROADCAST),
         TSV_GETBIT(status, TSV_TXPACKETDEFER),
         TSV_GETBIT(status, TSV_TXEXDEFER));
-    tprintf("  ExCollision: %d, LateCollision: %d, "
-        "Giant: %d, Underrun: %d\r\n",
+    tprintf("  ExCollision: %i, LateCollision: %i, "
+        "Giant: %i, Underrun: %i\r\n",
         TSV_GETBIT(status, TSV_TXEXCOLLISION),
         TSV_GETBIT(status, TSV_TXLATECOLLISION),
         TSV_GETBIT(status, TSV_TXGIANT),
         TSV_GETBIT(status, TSV_TXUNDERRUN));
-    tprintf("  ControlFrame: %d, PauseFrame: %d, "
-         "BackPressApp: %d, VLanTagFrame: %d\r\n",
+    tprintf("  ControlFrame: %i, PauseFrame: %i, "
+         "BackPressApp: %i, VLanTagFrame: %i\r\n",
          TSV_GETBIT(status, TSV_TXCONTROLFRAME),
          TSV_GETBIT(status, TSV_TXPAUSEFRAME),
          TSV_GETBIT(status, TSV_BACKPRESSUREAPP),
          TSV_GETBIT(status, TSV_TXVLANTAGFRAME));
+}
+
+static void enc_regdump(void)
+{
+    tprintf(
+        "HwRevID: 0x%x\n"
+        "Cntrl: ECON1   ECON2   ESTAT   EIR     EIE\n"
+        "       0x%x  0x%x  0x%x  0x%x  0x%x\n"
+        "MAC  : MACON1  MACON3  MACON4\n"
+        "       0x%x  0x%x  0x%x\n"
+        "Rx   : ERXST  ERXND  ERXWRPT ERXRDPT ERXFCON   EPKTCNT   MAMXFL\n"
+        "       0x%x 0x%x 0x%x  0x%x  "
+        "0x%x    0x%x    0x%x\n"
+        "Tx   : ETXST  ETXND  MACLCON1\n"
+        "       0x%x 0x%x 0x%x\n",
+        READ_REG(ENC_EREVID),
+        READ_REG(ENC_ECON1), READ_REG(ENC_ECON2),
+        READ_REG(ENC_ESTAT), READ_REG(ENC_EIR),
+        READ_REG(ENC_EIE), READ_REG(ENC_MACON1),
+        READ_REG(ENC_MACON3), READ_REG(ENC_MACON4),
+        READ_REG(ENC_ERXSTL), READ_REG(ENC_ERXNDL),
+        READ_REG(ENC_ERXWRPTL),
+        READ_REG(ENC_ERXRDPTL),
+        READ_REG(ENC_ERXFCON),
+        READ_REG(ENC_EPKTCNT),
+        READ_REG(ENC_MAMXFLL), READ_REG(ENC_ETXSTL),
+        READ_REG(ENC_ETXNDL),
+        READ_REG(ENC_MACLCON1));
 }
 
 void enc_send_packet_begin(uint16_t count)
@@ -488,13 +527,7 @@ void enc_send_packet_begin(uint16_t count)
     uint8_t control;
     uint16_t tx_end;
 
-    /*
-    if (count > 1000) {
-        tprintf("enc_send_packet_begin(%d)\r\n", count);
-    }
-    */
-
-    /* Errata 12 */
+    /* Errata B7 10 */
     SET_REG_BITS(ENC_ECON1, ENC_ECON1_TXRST);
     CLEAR_REG_BITS(ENC_ECON1, ENC_ECON1_TXRST);
     CLEAR_REG_BITS(ENC_EIR, ENC_EIR_TXIF);
@@ -527,38 +560,23 @@ void enc_send_packet_begin(uint16_t count)
 
 void enc_send_packet_end(uint16_t count)
 {
-    uint8_t r;
     uint8_t status[7];
     //uint16_t transmit_count;
     uint16_t tx_end;
 
     tx_end = TX_START + count;
 
-    // tprintf("Done writing..\r\n");
-    /*
-    tprintf("Write pointer start: [0x%x]\r\n",
-        READ_REG(ENC_EWRPTL) | (READ_REG(ENC_EWRPTL) << 8));
-    tprintf("End pointer: [0x%x]\r\n",
-        READ_REG(ENC_ETXNDL) | (READ_REG(ENC_ETXNDH) << 8));
-    */
-
-    //tprintf("enc_send_packet_end()\r\n");
-
-    /* Errata 12 */
-    /*
-    SET_REG_BITS(ENC_ECON1, ENC_ECON1_TXRST);
-    CLEAR_REG_BITS(ENC_ECON1, ENC_ECON1_TXRST);
-    CLEAR_REG_BITS(ENC_EIR, ENC_EIR_TXIF);
-    */
-
     SET_REG_BITS(ENC_ECON1, ENC_ECON1_TXRTS);
 
     /* Busy wait for the transmission to complete */
-    while (1) {
-        r = READ_REG(ENC_ECON1);
-        if ((r & ENC_ECON1_TXRTS) == 0)
-            break;
-    }
+    while (READ_REG(ENC_ECON1) & ENC_ECON1_TXRTS);
+
+    uint16_t txst_after =
+        READ_REG(ENC_ETXSTL) | (READ_REG(ENC_ETXSTH) << 8);
+    uint16_t txnd_after =
+        READ_REG(ENC_ETXNDL) | (READ_REG(ENC_ETXNDH) << 8);
+    uint16_t wrpt_after = 
+        READ_REG(ENC_EWRPTL) | (READ_REG(ENC_EWRPTL) << 8);
 
     /* Read status bits */
     tx_end++;
@@ -573,12 +591,13 @@ void enc_send_packet_end(uint16_t count)
     } else {
         tprintf("Transmit NOT OK\n");
         enc_print_status(status);
+        while (1);
     }
 }
 
 void enc_send_packet(const uint8_t *buf, uint16_t count)
 {
-    //tprintf("enc_send_packet(..., %d)\r\n", count);
+    //tprintf("enc_send_packet(..., %i)\r\n", count);
     enc_wbm(buf, count);
 }
 
@@ -589,6 +608,13 @@ uint16_t enc_receive_packet_begin(void)
     uint8_t *status = header + 2;
     uint16_t data_count;
     //tprintf("enc_receive_packet_begin()\r\n");
+
+    if (READ_REG(ENC_EIR) & ENC_EIR_RXERIF) {
+        tprintf("There are errors!!\r\n");
+    }
+    if (READ_REG(ENC_EPKTCNT) == 0) {
+        tprintf("But there are no packets?!?!\r\n");
+    }
 
     WRITE_REG(ENC_ERDPTL, enc_next_packet & 0xFF);
     WRITE_REG(ENC_ERDPTH, (enc_next_packet >> 8) & 0xFF);
@@ -608,7 +634,7 @@ uint16_t enc_receive_packet_begin(void)
 
 void enc_receive_packet(uint8_t *buf, uint16_t len)
 {
-    //tprintf("enc_receive_packet(..., %d)\r\n", len);
+    //tprintf("enc_receive_packet(..., %i)\r\n", len);
     enc_rbm(buf, len);
 }
 
@@ -640,6 +666,7 @@ uint8_t enc_test(void)
 
     tprintf("REV: 0x%x, MAC: [%x:%x:%x:%x:%x:%x]\n",
         rev, mc[0], mc[1], mc[2], mc[3], mc[4], mc[5]);
+    enc_regdump();
 
     return 0;
 }
