@@ -96,21 +96,31 @@ always @(posedge clk) begin
             end else begin
                 OUTCLK <= 1'b0;
             end
-            pulseflip = 0;
+            pulseflip <= 0;
         end else begin
             OUTCLK <= 1'b0;
-            pulseflip = 1;
+            pulseflip <= 1;
         end
     end
 
     if (~HSYNC_active) begin
-        active_column = active_column + 1;
+        active_column <= active_column + 1;
         if (saving) begin
-            sram_address <= sram_address + 1;
-            sram_d <= PIXEL;
+            if (sram_address == 0) begin
+                sram_d <= num_columns[7:0];
+            end else if (sram_address == 1) begin
+                sram_d <= num_columns[15:8];
+            end else if (sram_address == 2) begin
+                sram_d <= num_rows[7:0];
+            end else if (sram_address == 3) begin
+                sram_d <= num_rows[15:8];
+            end else begin
+                sram_d <= PIXEL;
+            end
             //sram_d <= 8'b00000010;
             //sram_d = color_toggle == 1 ? 8'b11100000 : 8'b00011100;
             sram_wren <= 1;
+            sram_address <= sram_address + 1;
         end
     end
 
@@ -120,7 +130,7 @@ always @(posedge clk) begin
         active_column <= 0;
     /* line ends */
     end else if (HSYNC_fallingedge) begin
-        num_columns <= active_column;
+        num_columns <= active_column + 1;
     end
 
     /* frame begins */
